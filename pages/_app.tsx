@@ -2,7 +2,6 @@
 import React from 'react';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
-import { Analytics } from '@vercel/analytics/react';
 import '../styles/globals.css';
 
 // Error Boundary Component
