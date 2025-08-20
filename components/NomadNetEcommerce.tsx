@@ -283,7 +283,53 @@ const handleCheckout = async (): Promise<void> => {
 
   // Rest of your component views would go here...
   // (HomeView, ProductsView, CartView, etc.)
-  
+  const ProgressIndicator: React.FC = () => {
+  const step = getProgressStep();
+  const steps = [
+    { number: 1, title: 'Choose Router', active: step >= 1 },
+    { number: 2, title: 'Add Data Plan', active: step >= 2 },
+    { number: 3, title: 'Review Order', active: step >= 3 },
+    { number: 4, title: 'Checkout', active: step >= 4 }
+  ];
+
+  if (currentView === 'home' || currentView === 'about' || currentView === 'support') return null;
+
+  return (
+    <div className="bg-white border-b">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="flex items-center justify-between">
+          {steps.map((stepItem, index) => (
+            <React.Fragment key={stepItem.number}>
+              <div className="flex items-center">
+                <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
+                  stepItem.active 
+                    ? 'bg-blue-600 border-blue-600 text-white' 
+                    : 'border-gray-300 text-gray-300'
+                }`}>
+                  {stepItem.active ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <span className="text-sm font-semibold">{stepItem.number}</span>
+                  )}
+                </div>
+                <span className={`ml-2 text-sm font-medium ${
+                  stepItem.active ? 'text-gray-900' : 'text-gray-300'
+                }`}>
+                  {stepItem.title}
+                </span>
+              </div>
+              {index < steps.length - 1 && (
+                <div className={`flex-1 mx-4 h-px ${
+                  step > stepItem.number ? 'bg-blue-600' : 'bg-gray-300'
+                }`} />
+              )}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
