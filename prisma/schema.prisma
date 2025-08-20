@@ -1,3 +1,4 @@
+// /var/www/nomadnet-ecommerce/prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,76 +9,89 @@ datasource db {
 }
 
 model Customer {
-  id               String         @id @default(cuid())
-  email            String         @unique
-  firstName        String
-  lastName         String
-  phone            String?
-  stripeCustomerId String?        @unique
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  orders           Order[]
-  subscriptions    Subscription[]
+  id                String   @id @default(cuid())
+  email             String   @unique
+  stripeCustomerId  String   @unique
+  firstName         String?
+  lastName          String?
+  phone             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  orders            Order[]
+  subscriptions     Subscription[]
+  
   @@map("customers")
 }
 
 model Order {
-  id                     String      @id @default(cuid())
-  customerId             String
-  stripeSessionId        String      @unique
-  stripePaymentIntentId  String?
-  status                 OrderStatus @default(PAID)
-  totalAmount            Int
-  currency               String      @default("usd")
-  shippingAddress        String
-  shippingCity           String
-  shippingState          String
-  shippingZipCode        String
-  shippingCountry        String      @default("US")
-  trackingNumber         String?
+  id                    String   @id @default(cuid())
+  stripeSessionId       String   @unique
+  stripePaymentIntentId String?
+  customerId            String
+  customer              Customer @relation(fields: [customerId], references: [id])
+  
+  status                OrderStatus @default(PENDING)
+  totalAmount           Int
+  currency              String @default("usd")
+  
+  shippingFirstName     String
+  shippingLastName      String
+  shippingAddress       String
+  shippingCity          String
+  shippingState         String?
+  shippingZipCode       String
+  shippingCountry       String @default("US")
+  
+  trackingNumber        String?
   shippedAt             DateTime?
   deliveredAt           DateTime?
-  createdAt             DateTime    @default(now())
-  updatedAt             DateTime    @updatedAt
-  customer              Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
   orderItems            OrderItem[]
+  
   @@map("orders")
 }
 
 model OrderItem {
   id          String @id @default(cuid())
   orderId     String
+  order       Order  @relation(fields: [orderId], references: [id])
+  
   productId   String
   productName String
+  price       Int
   quantity    Int
-  unitPrice   Int
-  totalPrice  Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
   @@map("order_items")
 }
 
 model Subscription {
-  id                   String            @id @default(cuid())
+  id                   String   @id @default(cuid())
+  stripeSubscriptionId String   @unique
   customerId           String
-  stripeSubscriptionId String            @unique
-  stripeCustomerId     String
+  customer             Customer @relation(fields: [customerId], references: [id])
+  
   status               SubscriptionStatus
-  planName             String
-  planPrice            Int
   currentPeriodStart   DateTime
   currentPeriodEnd     DateTime
-  trialEnd             DateTime?
-  cancelAtPeriodEnd    Boolean           @default(false)
-  cancelledAt          DateTime?
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
-  customer             Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  cancelAtPeriodEnd    Boolean @default(false)
+  canceledAt           DateTime?
+  
+  planId               String
+  planName             String
+  planPrice            Int
+  
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
   @@map("subscriptions")
 }
 
 enum OrderStatus {
+  PENDING
   PAID
   PROCESSING
   SHIPPED
@@ -87,11 +101,11 @@ enum OrderStatus {
 }
 
 enum SubscriptionStatus {
-  TRIALING
   ACTIVE
   PAST_DUE
-  CANCELLED
+  CANCELED
   UNPAID
   INCOMPLETE
   INCOMPLETE_EXPIRED
+  TRIALING
 }

@@ -1,44 +1,45 @@
-import { stripe } from '../../lib/stripe';
+// /var/www/nomadnet-ecommerce/pages/api/create-checkout-session.js
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method === 'POST') {
+    try {
+      const {
+        line_items,
+        customer_email,
+        billing_address_collection,
+        shipping_address_collection,
+        success_url,
+        cancel_url,
+        metadata,
+        automatic_tax,
+        allow_promotion_codes
+      } = req.body;
 
-  try {
-    const {
-      line_items,
-      customer_email,
-      metadata,
-      success_url,
-      cancel_url,
-      billing_address_collection,
-      shipping_address_collection,
-      automatic_tax,
-      allow_promotion_codes
-    } = req.body;
+      // Create Checkout Sessions from body params.
+      const session = await stripe.checkout.sessions.create({
+        line_items,
+        mode: 'payment',
+        customer_email,
+        billing_address_collection,
+        shipping_address_collection,
+        success_url,
+        cancel_url,
+        metadata,
+        automatic_tax,
+        allow_promotion_codes,
+        payment_intent_data: {
+          metadata: metadata
+        }
+      });
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      line_items,
-      mode: 'payment',
-      customer_email,
-      billing_address_collection,
-      shipping_address_collection,
-      automatic_tax,
-      allow_promotion_codes,
-      metadata,
-      success_url,
-      cancel_url,
-      expires_at: Math.floor(Date.now() / 1000) + (30 * 60),
-    });
-
-    res.status(200).json({ 
-      checkout_url: session.url,
-      session_id: session.id 
-    });
-  } catch (error) {
-    console.error('Error creating checkout session:', error);
-    res.status(500).json({ error: 'Internal server error' });
+      res.status(200).json({ url: session.url });
+    } catch (err) {
+      console.error('Error creating checkout session:', err);
+      res.status(500).json({ error: err.message });
+    }
+  } else {
+    res.setHeader('Allow', 'POST');
+    res.status(405).end('Method Not Allowed');
   }
 }
