@@ -246,32 +246,7 @@ function NomadNetApp({ Component, pageProps, router }: AppProps) {
       <div className={isLoading ? 'hidden' : 'block'}>
         <Component {...pageProps} />
       </div>
-
-      {/* Analytics */}
-      {process.env.NODE_ENV === 'production' && (
-        <>
-          <Analytics />
-          {/* Google Analytics */}
-          {process.env.GOOGLE_ANALYTICS_ID && (
-            <>
-              <script
-                async
-                src={`https://www.googletagmanager.com/gtag/js?id=${process.env.GOOGLE_ANALYTICS_ID}`}
-              />
-              <script
-                dangerouslySetInnerHTML={{
-                  __html: `
-                    window.dataLayer = window.dataLayer || [];
-                    function gtag(){dataLayer.push(arguments);}
-                    gtag('js', new Date());
-                    gtag('config', '${process.env.GOOGLE_ANALYTICS_ID}');
-                  `,
-                }}
-              />
-            </>
-          )}
-        </>
-      )}
+      
     </ErrorBoundary>
   );
 }
