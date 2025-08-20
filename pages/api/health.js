@@ -1,41 +1,89 @@
 // /var/www/nomadnet-ecommerce/pages/api/health.js
-import { prisma } from '../../lib/db';
+import { NextApiRequest, NextApiResponse } from 'next';
 
+// Health check endpoint for monitoring and deployment verification
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    // Test database connection
-    await prisma.$queryRaw`SELECT 1`;
-    
-    // Check environment variables
-    const envCheck = {
-      hasStripeKey: !!process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_SECRET_KEY.includes('your_'),
-      hasStripeWebhook: !!process.env.STRIPE_WEBHOOK_SECRET && !process.env.STRIPE_WEBHOOK_SECRET.includes('your_'),
-      hasDatabase: !!process.env.DATABASE_URL,
-      hasSendGrid: !!process.env.SENDGRID_API_KEY && !process.env.SENDGRID_API_KEY.includes('your_'),
+    // Basic health information
+    const health = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      service: 'nomadnet-ecommerce',
+      version: process.env.npm_package_version || '1.0.0',
+      environment: process.env.NODE_ENV || 'development',
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
     };
 
-    const allConfigured = Object.values(envCheck).every(Boolean);
+    // Check environment variables
+    const requiredEnvVars = [
+      'STRIPE_SECRET_KEY',
+      'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY',
+      'STRIPE_WEBHOOK_SECRET',
+    ];
 
-    res.status(200).json({ 
-      status: 'healthy',
-      message: 'NomadConnect API is running',
-      timestamp: new Date().toISOString(),
-      database: 'connected',
-      environment: envCheck,
-      configured: allConfigured,
-      version: '1.0.0'
-    });
+    const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
+    
+    if (missingEnvVars.length > 0) {
+      health.status = 'degraded';
+      health.warnings = [`Missing environment variables: ${missingEnvVars.join(', ')}`];
+    }
+
+    // Check Stripe connection
+    let stripeStatus = 'unknown';
+    try {
+      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+      await stripe.accounts.retrieve();
+      stripeStatus = 'connected';
+    } catch (error) {
+      stripeStatus = 'disconnected';
+      health.status = 'unhealthy';
+      health.errors = health.errors || [];
+      health.errors.push('Stripe connection failed');
+    }
+
+    // Add service checks
+    health.checks = {
+      stripe: {
+        status: stripeStatus,
+        timestamp: new Date().toISOString(),
+      },
+      environment: {
+        status: missingEnvVars.length === 0 ? 'pass' : 'fail',
+        missing_vars: missingEnvVars,
+        timestamp: new Date().toISOString(),
+      },
+      database: {
+        status: process.env.DATABASE_URL ? 'configured' : 'not_configured',
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    // Determine overall status
+    if (health.status === 'healthy' && stripeStatus !== 'connected') {
+      health.status = 'degraded';
+    }
+
+    // Set appropriate HTTP status code
+    const httpStatus = health.status === 'healthy' ? 200 : 
+                      health.status === 'degraded' ? 200 : 503;
+
+    res.status(httpStatus).json(health);
+
   } catch (error) {
     console.error('Health check failed:', error);
-    res.status(500).json({ 
+    
+    res.status(503).json({
       status: 'unhealthy',
-      message: 'Health check failed',
-      error: error.message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      service: 'nomadnet-ecommerce',
+      error: 'Health check failed',
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
     });
   }
 }

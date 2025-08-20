@@ -1,4 +1,8 @@
 // /var/www/nomadnet-ecommerce/prisma/schema.prisma
+
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,91 +12,305 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Customer model
 model Customer {
-  id                String   @id @default(cuid())
-  email             String   @unique
-  stripeCustomerId  String   @unique
-  firstName         String?
-  lastName          String?
-  phone             String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id        String   @id @default(cuid())
+  email     String   @unique
+  firstName String?
+  lastName  String?
+  phone     String?
   
-  orders            Order[]
-  subscriptions     Subscription[]
+  // Stripe integration
+  stripeCustomerId String? @unique
+  
+  // Address information
+  billingAddress  Json?
+  shippingAddress Json?
+  
+  // Preferences
+  emailOptIn Boolean @default(true)
+  smsOptIn   Boolean @default(false)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  orders        Order[]
+  subscriptions Subscription[]
   
   @@map("customers")
 }
 
+// Product model
+model Product {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  category    String  // 'router' | 'data_plan' | 'accessory'
+  
+  // Pricing
+  price         Int     // Price in cents
+  originalPrice Int?    // Original price in cents (for discounts)
+  currency      String  @default("usd")
+  
+  // Product details
+  sku           String  @unique
+  specifications Json?  // Technical specs as JSON
+  features      String[] // Array of feature strings
+  
+  // Inventory
+  stockQuantity Int     @default(0)
+  isActive      Boolean @default(true)
+  
+  // SEO
+  slug        String  @unique
+  metaTitle   String?
+  metaDescription String?
+  
+  // Stripe integration
+  stripePriceId String?
+  stripeProductId String?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  orderItems OrderItem[]
+  
+  @@map("products")
+}
+
+// Order model
 model Order {
-  id                    String   @id @default(cuid())
-  stripeSessionId       String   @unique
-  stripePaymentIntentId String?
-  customerId            String
-  customer              Customer @relation(fields: [customerId], references: [id])
+  id       String      @id @default(cuid())
+  orderNumber String   @unique
+  status   OrderStatus @default(PENDING)
   
-  status                OrderStatus @default(PENDING)
-  totalAmount           Int
-  currency              String @default("usd")
+  // Customer information
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
   
-  shippingFirstName     String
-  shippingLastName      String
-  shippingAddress       String
-  shippingCity          String
-  shippingState         String?
-  shippingZipCode       String
-  shippingCountry       String @default("US")
+  // Pricing
+  subtotal    Int // Amount in cents
+  taxAmount   Int @default(0)
+  shippingAmount Int @default(0)
+  totalAmount Int
+  currency    String @default("usd")
   
-  trackingNumber        String?
-  shippedAt             DateTime?
-  deliveredAt           DateTime?
+  // Shipping information
+  shippingFirstName String?
+  shippingLastName  String?
+  shippingAddress   String?
+  shippingCity      String?
+  shippingState     String?
+  shippingZipCode   String?
+  shippingCountry   String @default("US")
   
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  // Tracking
+  trackingNumber String?
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
   
-  orderItems            OrderItem[]
+  // Payment information
+  stripeSessionId       String? @unique
+  stripePaymentIntentId String? @unique
+  paymentStatus         PaymentStatus @default(PENDING)
+  
+  // Metadata
+  notes    String?
+  metadata Json?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  orderItems OrderItem[]
   
   @@map("orders")
 }
 
+// Order item model
 model OrderItem {
-  id          String @id @default(cuid())
-  orderId     String
-  order       Order  @relation(fields: [orderId], references: [id])
+  id       String @id @default(cuid())
+  orderId  String
+  order    Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
   
   productId   String
-  productName String
-  price       Int
+  product     Product @relation(fields: [productId], references: [id])
+  
+  // Item details
+  productName String // Store name at time of order
+  price       Int    // Price in cents at time of order
   quantity    Int
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   
   @@map("order_items")
 }
 
+// Subscription model (for data plans)
 model Subscription {
-  id                   String   @id @default(cuid())
-  stripeSubscriptionId String   @unique
-  customerId           String
-  customer             Customer @relation(fields: [customerId], references: [id])
+  id         String             @id @default(cuid())
+  customerId String
+  customer   Customer           @relation(fields: [customerId], references: [id])
   
-  status               SubscriptionStatus
-  currentPeriodStart   DateTime
-  currentPeriodEnd     DateTime
-  cancelAtPeriodEnd    Boolean @default(false)
-  canceledAt           DateTime?
+  // Subscription details
+  status       SubscriptionStatus @default(ACTIVE)
+  planName     String
+  planPrice    Int                // Price in cents
+  currency     String             @default("usd")
+  billingCycle String             @default("monthly") // 'monthly' | 'yearly'
   
-  planId               String
-  planName             String
-  planPrice            Int
+  // Stripe integration
+  stripeSubscriptionId String? @unique
+  stripePriceId        String?
+  stripeCustomerId     String?
   
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  // Billing dates
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  nextBillingDate    DateTime?
+  
+  // Cancellation
+  cancelAtPeriodEnd Boolean @default(false)
+  canceledAt        DateTime?
+  cancellationReason String?
+  
+  // Metadata
+  metadata Json?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   
   @@map("subscriptions")
 }
 
+// Support ticket model
+model SupportTicket {
+  id       String              @id @default(cuid())
+  ticketNumber String          @unique
+  status   SupportTicketStatus @default(OPEN)
+  priority SupportPriority     @default(NORMAL)
+  
+  // Customer information
+  customerEmail String
+  customerName  String?
+  customerId    String?
+  
+  // Ticket details
+  subject     String
+  description String
+  category    String? // 'technical' | 'billing' | 'shipping' | 'other'
+  
+  // Assignment
+  assignedTo String?
+  
+  // Resolution
+  resolution String?
+  resolvedAt DateTime?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("support_tickets")
+}
+
+// Shipping address model (for future use)
+model ShippingAddress {
+  id        String @id @default(cuid())
+  
+  firstName String
+  lastName  String
+  company   String?
+  address1  String
+  address2  String?
+  city      String
+  state     String
+  zipCode   String
+  country   String @default("US")
+  phone     String?
+  
+  isDefault Boolean @default(false)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("shipping_addresses")
+}
+
+// Analytics model for tracking
+model Analytics {
+  id     String @id @default(cuid())
+  event  String
+  data   Json?
+  userId String?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  
+  @@map("analytics")
+}
+
+// Email template model
+model EmailTemplate {
+  id       String @id @default(cuid())
+  name     String @unique
+  subject  String
+  htmlBody String
+  textBody String?
+  
+  isActive Boolean @default(true)
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("email_templates")
+}
+
+// Coupon model
+model Coupon {
+  id          String      @id @default(cuid())
+  code        String      @unique
+  type        CouponType  @default(PERCENTAGE)
+  value       Int         // Percentage (1-100) or amount in cents
+  description String?
+  
+  // Usage limits
+  maxUses      Int?
+  usedCount    Int @default(0)
+  maxUsesPerCustomer Int? @default(1)
+  
+  // Validity
+  isActive   Boolean   @default(true)
+  validFrom  DateTime?
+  validUntil DateTime?
+  
+  // Constraints
+  minimumOrderAmount Int? // Minimum order amount in cents
+  applicableProducts String[] // Array of product IDs
+  
+  // Stripe integration
+  stripeCouponId String?
+  
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("coupons")
+}
+
+// Enums
 enum OrderStatus {
   PENDING
-  PAID
   PROCESSING
   SHIPPED
   DELIVERED
@@ -100,12 +318,41 @@ enum OrderStatus {
   REFUNDED
 }
 
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
 enum SubscriptionStatus {
   ACTIVE
   PAST_DUE
-  CANCELED
-  UNPAID
+  CANCELLED
   INCOMPLETE
   INCOMPLETE_EXPIRED
   TRIALING
+  UNPAID
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum SupportPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum CouponType {
+  PERCENTAGE
+  FIXED_AMOUNT
 }

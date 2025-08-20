@@ -1,72 +1,18 @@
-import React, { useState } from 'react';
-import { ShoppingCart, Wifi, MapPin, Truck, Users, Check, Star, Menu, X, CreditCard, Package, Globe, Shield, Zap, ArrowRight, ChevronRight, AlertCircle, HelpCircle, Loader2 } from 'lucide-react';
+// /var/www/nomadnet-ecommerce/components/NomadNetEcommerce.tsx
+import React, { useState, useEffect } from 'react';
+import { ShoppingCart, Wifi, MapPin, Truck, Users, Check, Star, Menu, X, CreditCard, Package, Smartphone, Globe, Shield, Zap, ArrowRight, ChevronRight, AlertCircle, HelpCircle } from 'lucide-react';
 
-// Base product interface
-interface BaseProduct {
-  id: string;
-  stripeProductId: string;
-  stripePriceId: string;
-  name: string;
-  price: number;
-  description: string;
-  features: string[];
-}
+const NomadNetEcommerce = () => {
+  const [currentView, setCurrentView] = useState('home');
+  const [selectedRouter, setSelectedRouter] = useState(null);
+  const [cart, setCart] = useState([]);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showDataPlanPromo, setShowDataPlanPromo] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-// Router product interface
-interface RouterProduct extends BaseProduct {
-  originalPrice?: number;
-  connectivity: string;
-  wifi: string;
-  ideal: string[];
-  beginnerFriendly?: boolean;
-  popular?: boolean;
-}
-
-// Data plan interface
-interface DataPlan extends BaseProduct {
-  type: string;
-}
-
-// Cart item can be either type
-interface CartItem extends BaseProduct {
-  quantity: number;
-  isDataPlan: boolean;
-  // Optional router properties
-  connectivity?: string;
-  wifi?: string;
-  ideal?: string[];
-  originalPrice?: number;
-  beginnerFriendly?: boolean;
-  popular?: boolean;
-  // Optional data plan properties
-  type?: string;
-}
-
-interface ShippingInfo {
-  firstName: string;
-  lastName: string;
-  address: string;
-  city: string;
-  zipCode: string;
-}
-
-const NomadNetEcommerce: React.FC = () => {
-  const [currentView, setCurrentView] = useState<string>('home');
-  const [selectedRouter, setSelectedRouter] = useState<RouterProduct | null>(null);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
-  const [isProcessingPayment, setIsProcessingPayment] = useState<boolean>(false);
-  const [customerEmail, setCustomerEmail] = useState<string>('');
-  const [customerPhone, setCustomerPhone] = useState<string>('');
-  const [shippingInfo, setShippingInfo] = useState<ShippingInfo>({
-    firstName: '', lastName: '', address: '', city: '', zipCode: ''
-  });
-
-  const products: Record<string, RouterProduct> = {
+  const products = {
     x2000: {
       id: 'x2000',
-      stripeProductId: 'prod_x2000', // UPDATE AFTER STRIPE SETUP
-      stripePriceId: 'price_x2000',
       name: 'GLiNet X2000 Spitz Plus',
       price: 400,
       originalPrice: 449,
@@ -75,12 +21,11 @@ const NomadNetEcommerce: React.FC = () => {
       description: 'Perfect starter router for reliable 4G connectivity',
       features: ['4G LTE CAT 12', 'Wi-Fi 6 (AX1800)', 'OpenWrt OS', 'VPN Ready', 'Dual-Band Wi-Fi', 'External Antenna Support'],
       ideal: ['First-time users', 'Budget-conscious nomads', 'Light internet usage', 'Backup connectivity'],
+      image: '/api/placeholder/400/300',
       beginnerFriendly: true
     },
     x3000: {
       id: 'x3000',
-      stripeProductId: 'prod_x3000', // UPDATE AFTER STRIPE SETUP
-      stripePriceId: 'price_x3000',
       name: 'GLiNet X3000 Spitz AX',
       price: 500,
       originalPrice: 579,
@@ -89,44 +34,45 @@ const NomadNetEcommerce: React.FC = () => {
       description: 'Premium router with 5G speeds and dual-SIM backup',
       features: ['5G NR + 4G LTE', 'Wi-Fi 6 AX3000', 'Dual-SIM Failover', 'OpenWrt OS', 'VPN Ready', 'Advanced QoS'],
       ideal: ['Power users', 'Remote workers', 'Heavy data usage', 'Streaming enthusiasts'],
+      image: '/api/placeholder/400/300',
       popular: true
     }
   };
 
-  const dataplan: DataPlan = {
+  const dataplan = {
     id: 'unlimited-data',
-    stripeProductId: 'prod_unlimited_data', // UPDATE AFTER STRIPE SETUP
-    stripePriceId: 'price_unlimited_data_monthly',
     name: 'Unlimited Data Plan',
     price: 79,
+    priceId: 'price_nomadnet_unlimited_data_79', // Stripe price ID
     type: 'subscription',
     description: 'Truly unlimited high-speed data with no throttling',
     features: ['Unlimited high-speed data', 'No contracts', 'Cancel anytime', 'Priority network access', '5G & 4G coverage', '24/7 support']
   };
 
-  const addRouterToCart = (product: RouterProduct): void => {
+  const addRouterToCart = (product) => {
     setSelectedRouter(product);
     setCart([{ ...product, quantity: 1, isDataPlan: false }]);
+    setShowDataPlanPromo(true);
     setCurrentView('add-data-plan');
   };
 
-  const addDataPlanToCart = (): void => {
+  const addDataPlanToCart = () => {
     setCart(prev => [...prev, { ...dataplan, quantity: 1, isDataPlan: true }]);
     setCurrentView('cart');
   };
 
-  const skipDataPlan = (): void => {
+  const skipDataPlan = () => {
     setCurrentView('cart');
   };
 
-  const removeFromCart = (productId: string): void => {
+  const removeFromCart = (productId) => {
     setCart(prev => prev.filter(item => item.id !== productId));
     if (productId === selectedRouter?.id) {
       setSelectedRouter(null);
     }
   };
 
-  const updateQuantity = (productId: string, quantity: number): void => {
+  const updateQuantity = (productId, quantity) => {
     if (quantity === 0) {
       removeFromCart(productId);
     } else {
@@ -139,80 +85,168 @@ const NomadNetEcommerce: React.FC = () => {
   const cartTotal = cart.reduce((total, item) => total + (item.price * item.quantity), 0);
   const cartItemCount = cart.reduce((total, item) => total + item.quantity, 0);
   const hasDataPlan = cart.some(item => item.isDataPlan);
-  const hardwareTotal = cart.filter(item => !item.isDataPlan).reduce((total, item) => total + (item.price * item.quantity), 0);
 
-  const createStripeCheckout = async (): Promise<void> => {
-    if (!customerEmail || !shippingInfo.firstName || !shippingInfo.lastName || !shippingInfo.address) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    setIsProcessingPayment(true);
-
+  // Stripe Checkout Integration
+  const handleCheckout = async () => {
+    setIsLoading(true);
+    
     try {
-      const lineItems = cart.filter(item => !item.isDataPlan).map(item => ({
-        price: item.stripePriceId,
+      const routerItems = cart.filter(item => !item.isDataPlan);
+      const subscriptionItems = cart.filter(item => item.isDataPlan);
+      
+      // Create line items for Stripe
+      const line_items = routerItems.map(item => ({
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: item.name,
+            description: item.description,
+            images: [item.image],
+            metadata: {
+              product_type: 'router',
+              product_id: item.id
+            }
+          },
+          unit_amount: item.price * 100, // Convert to cents
+        },
         quantity: item.quantity,
       }));
 
-      const checkoutData = {
-        line_items: lineItems,
-        mode: 'payment',
-        customer_email: customerEmail,
-        billing_address_collection: 'required',
-        shipping_address_collection: { allowed_countries: ['US'] },
-        metadata: {
-          customer_phone: customerPhone,
-          has_data_plan: hasDataPlan.toString(),
-          cart_items: JSON.stringify(cart.map(item => ({
-            id: item.id, name: item.name, quantity: item.quantity, price: item.price, isDataPlan: item.isDataPlan
-          })))
-        },
-        success_url: `${window.location.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${window.location.origin}/cart`,
-        automatic_tax: { enabled: true },
-        allow_promotion_codes: true,
-      };
-
-      if (hasDataPlan) {
-        (checkoutData.metadata as any).subscription_price_id = dataplan.stripePriceId;
+      // Add subscription items if present
+      if (subscriptionItems.length > 0) {
+        line_items.push(...subscriptionItems.map(item => ({
+          price: item.priceId, // Use the actual Stripe price ID
+          quantity: item.quantity,
+        })));
       }
+
+      const metadata = {
+        cart_items: JSON.stringify(cart),
+        has_data_plan: hasDataPlan.toString(),
+        subscription_price_id: hasDataPlan ? dataplan.priceId : '',
+        router_model: selectedRouter?.id || ''
+      };
 
       const response = await fetch('/api/create-checkout-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(checkoutData),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          line_items,
+          customer_email: '', // Will be collected in Stripe checkout
+          metadata,
+          success_url: `${window.location.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${window.location.origin}/cart`,
+          billing_address_collection: 'required',
+          shipping_address_collection: {
+            allowed_countries: ['US', 'CA'],
+          },
+          automatic_tax: {
+            enabled: true,
+          },
+          allow_promotion_codes: true,
+        }),
       });
 
-      if (!response.ok) throw new Error('Failed to create checkout session');
-
-      const { checkout_url } = await response.json();
-      window.location.href = checkout_url;
+      const { url } = await response.json();
       
+      if (url) {
+        window.location.href = url;
+      } else {
+        throw new Error('No checkout URL received');
+      }
     } catch (error) {
-      console.error('Error creating checkout:', error);
-      alert('Something went wrong. Please try again.');
-      setIsProcessingPayment(false);
+      console.error('Error creating checkout session:', error);
+      alert('There was an error processing your request. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const Header: React.FC = () => (
+  // Progress indicator for checkout flow
+  const getProgressStep = () => {
+    if (currentView === 'products' || currentView === 'home') return 1;
+    if (currentView === 'add-data-plan') return 2;
+    if (currentView === 'cart') return 3;
+    if (currentView === 'checkout') return 4;
+    return 1;
+  };
+
+  const ProgressIndicator = () => {
+    const step = getProgressStep();
+    const steps = [
+      { number: 1, title: 'Choose Router', active: step >= 1 },
+      { number: 2, title: 'Add Data Plan', active: step >= 2 },
+      { number: 3, title: 'Review Order', active: step >= 3 },
+      { number: 4, title: 'Checkout', active: step >= 4 }
+    ];
+
+    if (currentView === 'home' || currentView === 'about' || currentView === 'support') return null;
+
+    return (
+      <div className="bg-white border-b">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            {steps.map((stepItem, index) => (
+              <React.Fragment key={stepItem.number}>
+                <div className="flex items-center">
+                  <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
+                    stepItem.active 
+                      ? 'bg-blue-600 border-blue-600 text-white' 
+                      : 'border-gray-300 text-gray-300'
+                  }`}>
+                    {stepItem.active ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <span className="text-sm font-semibold">{stepItem.number}</span>
+                    )}
+                  </div>
+                  <span className={`ml-2 text-sm font-medium ${
+                    stepItem.active ? 'text-blue-600' : 'text-gray-500'
+                  }`}>
+                    {stepItem.title}
+                  </span>
+                </div>
+                {index < steps.length - 1 && (
+                  <ChevronRight className={`h-4 w-4 ${
+                    step > stepItem.number ? 'text-blue-600' : 'text-gray-300'
+                  }`} />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const Header = () => (
     <header className="bg-white shadow-sm sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center cursor-pointer" onClick={() => setCurrentView('home')}>
             <Wifi className="h-8 w-8 text-blue-600 mr-2" />
-            <span className="text-xl font-bold text-gray-900">NomadConnect</span>
+            <span className="text-xl font-bold text-gray-900">NomadNet</span>
           </div>
           
           <nav className="hidden md:flex space-x-8">
-            <button onClick={() => setCurrentView('products')} className="text-gray-700 hover:text-blue-600 transition">Products</button>
-            <button onClick={() => setCurrentView('about')} className="text-gray-700 hover:text-blue-600 transition">Why Choose Us</button>
-            <button onClick={() => setCurrentView('support')} className="text-gray-700 hover:text-blue-600 transition">Support</button>
+            <button onClick={() => setCurrentView('products')} className="text-gray-700 hover:text-blue-600 transition">
+              Products
+            </button>
+            <button onClick={() => setCurrentView('about')} className="text-gray-700 hover:text-blue-600 transition">
+              Why Choose Us
+            </button>
+            <button onClick={() => setCurrentView('support')} className="text-gray-700 hover:text-blue-600 transition">
+              Support
+            </button>
           </nav>
 
           <div className="flex items-center space-x-4">
-            <button onClick={() => setCurrentView('cart')} className="relative p-2 text-gray-700 hover:text-blue-600 transition">
+            <button 
+              onClick={() => setCurrentView('cart')}
+              className="relative p-2 text-gray-700 hover:text-blue-600 transition"
+            >
               <ShoppingCart className="h-6 w-6" />
               {cartItemCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
@@ -221,7 +255,10 @@ const NomadNetEcommerce: React.FC = () => {
               )}
             </button>
             
-            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="md:hidden p-2 text-gray-700">
+            <button 
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="md:hidden p-2 text-gray-700"
+            >
               {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
           </div>
@@ -231,16 +268,22 @@ const NomadNetEcommerce: React.FC = () => {
       {isMenuOpen && (
         <div className="md:hidden bg-white border-t">
           <div className="px-4 py-2 space-y-2">
-            <button onClick={() => { setCurrentView('products'); setIsMenuOpen(false); }} className="block w-full text-left py-2 text-gray-700">Products</button>
-            <button onClick={() => { setCurrentView('about'); setIsMenuOpen(false); }} className="block w-full text-left py-2 text-gray-700">Why Choose Us</button>
-            <button onClick={() => { setCurrentView('support'); setIsMenuOpen(false); }} className="block w-full text-left py-2 text-gray-700">Support</button>
+            <button onClick={() => { setCurrentView('products'); setIsMenuOpen(false); }} className="block w-full text-left py-2 text-gray-700">
+              Products
+            </button>
+            <button onClick={() => { setCurrentView('about'); setIsMenuOpen(false); }} className="block w-full text-left py-2 text-gray-700">
+              Why Choose Us
+            </button>
+            <button onClick={() => { setCurrentView('support'); setIsMenuOpen(false); }} className="block w-full text-left py-2 text-gray-700">
+              Support
+            </button>
           </div>
         </div>
       )}
     </header>
   );
 
-  const HeroSection: React.FC = () => (
+  const HeroSection = () => (
     <section className="bg-gradient-to-br from-blue-50 to-indigo-100 py-16 lg:py-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center">
@@ -260,10 +303,17 @@ const NomadNetEcommerce: React.FC = () => {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-            <button onClick={() => setCurrentView('products')} className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition flex items-center justify-center gap-2">
-              Get Started <ArrowRight className="h-5 w-5" />
+            <button 
+              onClick={() => setCurrentView('products')}
+              className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition flex items-center justify-center gap-2"
+            >
+              Get Started
+              <ArrowRight className="h-5 w-5" />
             </button>
-            <button onClick={() => setCurrentView('about')} className="border-2 border-blue-600 text-blue-600 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-600 hover:text-white transition">
+            <button 
+              onClick={() => setCurrentView('about')}
+              className="border-2 border-blue-600 text-blue-600 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-600 hover:text-white transition"
+            >
               Learn More
             </button>
           </div>
@@ -298,7 +348,7 @@ const NomadNetEcommerce: React.FC = () => {
     </section>
   );
 
-  const ProductCard: React.FC<{ product: RouterProduct }> = ({ product }) => (
+  const ProductCard = ({ product }) => (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow relative">
       {product.popular && (
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-center py-2 font-semibold">
@@ -325,9 +375,13 @@ const NomadNetEcommerce: React.FC = () => {
           <p className="text-gray-600 mb-4">{product.description}</p>
           
           <div className="flex items-center justify-center gap-2 mb-4">
-            <span className="text-3xl font-bold text-blue-600">${product.price}</span>
+            <span className="text-3xl font-bold text-blue-600">
+              ${product.price}
+            </span>
             {product.originalPrice && (
-              <span className="text-lg text-gray-400 line-through">${product.originalPrice}</span>
+              <span className="text-lg text-gray-400 line-through">
+                ${product.originalPrice}
+              </span>
             )}
           </div>
           
@@ -363,6 +417,19 @@ const NomadNetEcommerce: React.FC = () => {
           </div>
         </div>
 
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+          <h4 className="font-semibold text-green-800 mb-2 flex items-center gap-2">
+            <Package className="h-4 w-4" />
+            Ships Ready to Use
+          </h4>
+          <ul className="text-sm text-green-700 space-y-1">
+            <li>✅ Pre-configured with your settings</li>
+            <li>✅ SIM card installed and activated</li>
+            <li>✅ First 30 days of data included</li>
+            <li>✅ Just plug in and connect devices</li>
+          </ul>
+        </div>
+
         <button
           onClick={() => addRouterToCart(product)}
           className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition flex items-center justify-center gap-2"
@@ -374,7 +441,7 @@ const NomadNetEcommerce: React.FC = () => {
     </div>
   );
 
-  const ProductsView: React.FC = () => (
+  const ProductsView = () => (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <div className="text-center mb-12">
         <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
@@ -383,27 +450,566 @@ const NomadNetEcommerce: React.FC = () => {
         <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-6">
           Both routers arrive <strong>fully configured and ready to use</strong>. No technical setup required.
         </p>
+        
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-2xl mx-auto">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="text-left">
+              <h3 className="font-semibold text-blue-900 mb-1">New to cellular internet?</h3>
+              <p className="text-blue-800 text-sm">
+                Don't worry! Both routers work the same way - we handle all the technical setup. 
+                Your router arrives ready to plug in and use immediately.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
         <ProductCard product={products.x2000} />
         <ProductCard product={products.x3000} />
       </div>
+
+      <div className="bg-white rounded-xl shadow-lg p-8">
+        <h3 className="text-2xl font-bold text-center text-gray-900 mb-8">
+          Quick Comparison
+        </h3>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-4 px-4">Feature</th>
+                <th className="text-center py-4 px-4">X2000 Spitz Plus</th>
+                <th className="text-center py-4 px-4">X3000 Spitz AX</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              <tr>
+                <td className="py-4 px-4 font-medium">Best For</td>
+                <td className="py-4 px-4 text-center">First-time users & budget-conscious</td>
+                <td className="py-4 px-4 text-center">Power users & remote workers</td>
+              </tr>
+              <tr>
+                <td className="py-4 px-4 font-medium">Price</td>
+                <td className="py-4 px-4 text-center font-semibold text-green-600">$400</td>
+                <td className="py-4 px-4 text-center font-semibold text-blue-600">$500</td>
+              </tr>
+              <tr>
+                <td className="py-4 px-4 font-medium">Network</td>
+                <td className="py-4 px-4 text-center">4G LTE (Fast)</td>
+                <td className="py-4 px-4 text-center">5G + 4G (Fastest)</td>
+              </tr>
+              <tr>
+                <td className="py-4 px-4 font-medium">Max Devices</td>
+                <td className="py-4 px-4 text-center">32 devices</td>
+                <td className="py-4 px-4 text-center">64 devices</td>
+              </tr>
+              <tr>
+                <td className="py-4 px-4 font-medium">Backup SIM</td>
+                <td className="py-4 px-4 text-center">❌</td>
+                <td className="py-4 px-4 text-center">✅ Dual-SIM failover</td>
+              </tr>
+              <tr>
+                <td className="py-4 px-4 font-medium">Setup Required</td>
+                <td className="py-4 px-4 text-center text-green-600 font-semibold">None - Plug & Play</td>
+                <td className="py-4 px-4 text-center text-green-600 font-semibold">None - Plug & Play</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 
-  const renderView = (): JSX.Element => {
+  const AddDataPlanView = () => (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="text-center mb-12">
+        <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+          Step 2: Add Unlimited Data Plan
+        </h2>
+        <p className="text-xl text-gray-600 mb-6">
+          Your <strong>{selectedRouter?.name}</strong> is ready! Add our unlimited data plan to get online immediately.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        {/* Selected Router Summary */}
+        <div className="bg-green-50 border border-green-200 rounded-xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-green-600 text-white rounded-full w-8 h-8 flex items-center justify-center">
+              <Check className="h-5 w-5" />
+            </div>
+            <h3 className="text-lg font-bold text-green-800">Your Selected Router</h3>
+          </div>
+          
+          <div className="bg-white rounded-lg p-4 mb-4">
+            <h4 className="font-semibold text-gray-900 mb-2">{selectedRouter?.name}</h4>
+            <p className="text-gray-600 text-sm mb-3">{selectedRouter?.description}</p>
+            <div className="flex justify-between items-center">
+              <span className="text-2xl font-bold text-green-600">${selectedRouter?.price}</span>
+              <span className="text-sm text-gray-500">Ready to ship</span>
+            </div>
+          </div>
+          
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center gap-2 text-green-700">
+              <Check className="h-4 w-4" />
+              <span>Ships fully configured</span>
+            </div>
+            <div className="flex items-center gap-2 text-green-700">
+              <Check className="h-4 w-4" />
+              <span>SIM card pre-installed</span>
+            </div>
+            <div className="flex items-center gap-2 text-green-700">
+              <Check className="h-4 w-4" />
+              <span>30 days of data included</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Data Plan Option */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="text-center mb-6">
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">Unlimited Data Plan</h3>
+            <p className="text-gray-600 mb-4">Complete your setup with truly unlimited high-speed data</p>
+            
+            <div className="flex items-center justify-center gap-2 mb-6">
+              <span className="text-4xl font-bold text-blue-600">$79</span>
+              <span className="text-lg text-gray-600">/month</span>
+            </div>
+          </div>
+
+          <div className="space-y-3 mb-6">
+            {dataplan.features.map((feature, index) => (
+              <div key={index} className="flex items-center gap-3">
+                <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                <span className="text-gray-700">{feature}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <h4 className="font-semibold text-blue-900 mb-2">Why You Need This:</h4>
+            <p className="text-blue-800 text-sm">
+              Your router needs a data plan to connect to the internet. While it includes 30 days free, 
+              adding this plan ensures uninterrupted service from day one.
+            </p>
+          </div>
+
+          <button
+            onClick={addDataPlanToCart}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition mb-3"
+          >
+            Add Data Plan - $79/month
+          </button>
+          
+          <button
+            onClick={skipDataPlan}
+            className="w-full text-gray-600 py-2 text-sm hover:text-gray-800 transition"
+          >
+            Skip for now (you can add later)
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <h3 className="font-semibold text-yellow-900 mb-1">Reminder for Beginners</h3>
+            <p className="text-yellow-800 text-sm">
+              Your router includes 30 days of unlimited data, so you'll have internet right away. 
+              You can always add or change your data plan later from your account dashboard.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const CartView = () => (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <h2 className="text-3xl font-bold text-gray-900 mb-8">
+        Step 3: Review Your Order
+      </h2>
+      
+      {cart.length === 0 ? (
+        <div className="text-center py-12">
+          <ShoppingCart className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Your cart is empty</h3>
+          <p className="text-gray-600 mb-6">Let's get you started with a router</p>
+          <button 
+            onClick={() => setCurrentView('products')}
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+          >
+            Choose a Router
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2">
+            <div className="space-y-4 mb-8">
+              {cart.map((item) => (
+                <div key={item.id} className="bg-white rounded-lg shadow p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-lg font-semibold text-gray-900">{item.name}</h3>
+                        {item.isDataPlan && (
+                          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-semibold">
+                            Monthly Subscription
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-gray-600">{item.description}</p>
+                      <p className="text-blue-600 font-semibold mt-2">
+                        ${item.price}{item.isDataPlan ? '/mo' : ''} each
+                      </p>
+                      {item.isDataPlan && (
+                        <p className="text-green-600 text-sm mt-1">
+                          Cancel anytime • No contracts
+                        </p>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          className="bg-gray-200 text-gray-700 w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-300 transition"
+                        >
+                          -
+                        </button>
+                        <span className="w-8 text-center">{item.quantity}</span>
+                        <button 
+                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          className="bg-gray-200 text-gray-700 w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-300 transition"
+                        >
+                          +
+                        </button>
+                      </div>
+                      
+                      <button 
+                        onClick={() => removeFromCart(item.id)}
+                        className="text-red-500 hover:text-red-700 transition"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {!hasDataPlan && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+                <h3 className="font-semibold text-blue-900 mb-2">Add a Data Plan?</h3>
+                <p className="text-blue-800 text-sm mb-4">
+                  Your router includes 30 days of data, but adding a plan ensures uninterrupted service.
+                </p>
+                <button 
+                  onClick={() => setCurrentView('add-data-plan')}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition"
+                >
+                  Add Data Plan
+                </button>
+              </div>
+            )}
+          </div>
+          
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow p-6 sticky top-24">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Summary</h3>
+              
+              <div className="space-y-3 mb-6">
+                {cart.map((item) => (
+                  <div key={item.id} className="flex justify-between">
+                    <span className="text-gray-600">
+                      {item.name} × {item.quantity}
+                    </span>
+                    <span className="text-gray-900">
+                      ${(item.price * item.quantity).toFixed(2)}{item.isDataPlan ? '/mo' : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="border-t pt-4 mb-6">
+                <div className="flex justify-between text-lg font-semibold">
+                  <span>One-time Total</span>
+                  <span className="text-blue-600">
+                    ${cart.filter(item => !item.isDataPlan).reduce((total, item) => total + (item.price * item.quantity), 0).toFixed(2)}
+                  </span>
+                </div>
+                {hasDataPlan && (
+                  <div className="flex justify-between text-sm text-gray-600 mt-1">
+                    <span>Monthly subscription</span>
+                    <span>
+                      ${cart.filter(item => item.isDataPlan).reduce((total, item) => total + (item.price * item.quantity), 0).toFixed(2)}/mo
+                    </span>
+                  </div>
+                )}
+              </div>
+              
+              <button 
+                onClick={handleCheckout}
+                disabled={isLoading}
+                className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Shield className="h-4 w-4" />
+                    Secure Checkout
+                  </>
+                )}
+              </button>
+              
+              <div className="mt-6 space-y-2 text-sm text-gray-600">
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Ships fully configured</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>30 days of data included</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>Free shipping</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  <span>30-day money-back guarantee</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const AboutView = () => (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="text-center mb-16">
+        <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+          Perfect for Beginners & Pros Alike
+        </h2>
+        <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          No technical knowledge required. Every router ships <strong>fully configured</strong> and ready to activate upon delivery.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
+        <div className="text-center">
+          <div className="bg-green-100 p-6 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center">
+            <Package className="h-10 w-10 text-green-600" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-4">Zero Setup Required</h3>
+          <p className="text-gray-600">
+            Every router is pre-configured with your SIM card installed and activated. 
+            Simply unbox, plug in, and you're online in minutes.
+          </p>
+        </div>
+
+        <div className="text-center">
+          <div className="bg-blue-100 p-6 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center">
+            <HelpCircle className="h-10 w-10 text-blue-600" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-4">Beginner Friendly</h3>
+          <p className="text-gray-600">
+            New to cellular internet? Don't worry! Our routers are designed for anyone to use. 
+            No passwords to configure, no networks to setup.
+          </p>
+        </div>
+
+        <div className="text-center">
+          <div className="bg-purple-100 p-6 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center">
+            <Users className="h-10 w-10 text-purple-600" />
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-4">Built for Your Lifestyle</h3>
+          <p className="text-gray-600">
+            Whether you're in an RV, remote cabin, or traveling for work, 
+            our routers provide reliable internet wherever you go.
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-gray-50 rounded-2xl p-8 lg:p-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+          <div>
+            <h3 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-6">
+              What Makes Us Different
+            </h3>
+            <div className="space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 mt-1">
+                  <Check className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Pre-Configured Setup</h4>
+                  <p className="text-gray-600">Other companies ship blank routers. We pre-configure everything so you're online immediately.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-4">
+                <div className="bg-blue-500 text-white rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 mt-1">
+                  <Check className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-1">Beginner-First Approach</h4>
+                  <p className="text-gray-600">Designed for people who just want internet that works, not a technical project.</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-4">
+                <div className="bg-purple-500 text-white rounded-full w-8 h-8 flex items-center justify-center flex-shrink-0 mt-1">
+                  <Check className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-1">30 Days Included</h4>
+                  <p className="text-gray-600">Start using internet immediately with 30 days of unlimited data included with every router.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-lg p-8">
+            <div className="text-center">
+              <h4 className="text-xl font-bold text-gray-900 mb-4">Customer Success Story</h4>
+              <div className="flex justify-center mb-4">
+                {[...Array(5)].map((_, i) => (
+                  <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
+                ))}
+              </div>
+              <blockquote className="text-gray-600 italic mb-4">
+                "I was terrified of setting up cellular internet, but this was literally plug and play. 
+                My router arrived, I plugged it in, and I had fast internet in my RV immediately. 
+                Perfect for someone like me who isn't tech-savvy!"
+              </blockquote>
+              <cite className="text-sm text-gray-500">- Mike R., First-time RV owner</cite>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const SupportView = () => (
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="text-center mb-12">
+        <h2 className="text-3xl font-bold text-gray-900 mb-4">Support & FAQ</h2>
+        <p className="text-xl text-gray-600">
+          Common questions from beginners and experienced users
+        </p>
+      </div>
+
+      <div className="space-y-8">
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">For Beginners</h3>
+          
+          <div className="space-y-6">
+            <div>
+              <h4 className="font-medium text-gray-900 mb-2">I'm not technical at all. Will this work for me?</h4>
+              <p className="text-gray-600">
+                Absolutely! We designed this specifically for non-technical users. Your router arrives completely set up. 
+                Just plug it into power and you're online. No passwords, no configuration needed.
+              </p>
+            </div>
+            
+            <div>
+              <h4 className="font-medium text-gray-900 mb-2">What exactly do I need to do when it arrives?</h4>
+              <p className="text-gray-600">
+                Just three steps: 1) Unbox your router, 2) Plug it into power, 3) Connect your devices to the wifi network (password is printed on the router). That's it!
+              </p>
+            </div>
+            
+            <div>
+              <h4 className="font-medium text-gray-900 mb-2">Will I have internet immediately?</h4>
+              <p className="text-gray-600">
+                Yes! Your router includes 30 days of unlimited data that activates as soon as you plug it in. No waiting, no activation calls.
+              </p>
+            </div>
+            
+            <div>
+              <h4 className="font-medium text-gray-900 mb-2">What if I can't get it to work?</h4>
+              <p className="text-gray-600">
+                Our support team helps beginners every day. We'll walk you through everything step-by-step. Plus, you have 30 days to return it if you're not satisfied.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Technical Details</h3>
+          
+          <div className="space-y-6">
+            <div>
+              <h4 className="font-medium text-gray-900 mb-2">How many devices can connect?</h4>
+              <p className="text-gray-600">
+                X2000: Up to 32 devices (phones, laptops, tablets, etc.). X3000: Up to 64 devices. Perfect for families or small teams.
+              </p>
+            </div>
+            
+            <div>
+              <h4 className="font-medium text-gray-900 mb-2">What's the difference between 4G and 5G?</h4>
+              <p className="text-gray-600">
+                5G is faster where available (up to 10x faster downloads). The X3000 automatically switches between 5G and 4G based on what's available in your location.
+              </p>
+            </div>
+            
+            <div>
+              <h4 className="font-medium text-gray-900 mb-2">Can I use this for streaming and video calls?</h4>
+              <p className="text-gray-600">
+                Yes! Our unlimited plans have no throttling or data caps. Stream Netflix, do Zoom calls, work remotely - just like home internet.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-blue-50 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-blue-900 mb-4">24/7 Beginner Support</h3>
+            <p className="text-blue-700 mb-4">
+              Our support team specializes in helping first-time users. No question is too basic.
+            </p>
+            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition">
+              Contact Support
+            </button>
+          </div>
+          
+          <div className="bg-green-50 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-green-900 mb-4">Risk-Free Trial</h3>
+            <p className="text-green-700 mb-4">
+              Not satisfied? Return within 30 days for a full refund. We even pay return shipping.
+            </p>
+            <button className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition">
+              Return Policy
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderView = () => {
     switch (currentView) {
       case 'products':
         return <ProductsView />;
+      case 'add-data-plan':
+        return <AddDataPlanView />;
       case 'cart':
-        return <div className="p-8 text-center"><h2 className="text-2xl font-bold">Cart View - Coming Soon</h2></div>;
-      case 'checkout':
-        return <div className="p-8 text-center"><h2 className="text-2xl font-bold">Checkout View - Coming Soon</h2></div>;
+        return <CartView />;
       case 'about':
-        return <div className="p-8 text-center"><h2 className="text-2xl font-bold">About View - Coming Soon</h2></div>;
+        return <AboutView />;
       case 'support':
-        return <div className="p-8 text-center"><h2 className="text-2xl font-bold">Support View - Coming Soon</h2></div>;
+        return <SupportView />;
       default:
         return (
           <>
@@ -419,17 +1025,53 @@ const NomadNetEcommerce: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
+      <ProgressIndicator />
       {renderView()}
       
       <footer className="bg-gray-900 text-white py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <div className="flex items-center justify-center mb-4">
-              <Wifi className="h-6 w-6 text-blue-400 mr-2" />
-              <span className="text-lg font-bold">NomadConnect</span>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div>
+              <div className="flex items-center mb-4">
+                <Wifi className="h-6 w-6 text-blue-400 mr-2" />
+                <span className="text-lg font-bold">NomadNet</span>
+              </div>
+              <p className="text-gray-400">
+                Pre-configured internet for the mobile lifestyle. No setup required.
+              </p>
             </div>
-            <p className="text-gray-400">Pre-configured internet for the mobile lifestyle. No setup required.</p>
-            <p className="text-gray-400 mt-4">&copy; 2025 NomadConnect. All rights reserved. • Internet anywhere, setup-free.</p>
+            
+            <div>
+              <h4 className="font-semibold mb-4">Products</h4>
+              <ul className="space-y-2 text-gray-400">
+                <li>GLiNet X2000 (Beginner)</li>
+                <li>GLiNet X3000 (Premium)</li>
+                <li>Unlimited Data Plans</li>
+              </ul>
+            </div>
+            
+            <div>
+              <h4 className="font-semibold mb-4">Support</h4>
+              <ul className="space-y-2 text-gray-400">
+                <li>Beginner Help</li>
+                <li>Setup Guides</li>
+                <li>24/7 Support</li>
+                <li>Return Policy</li>
+              </ul>
+            </div>
+            
+            <div>
+              <h4 className="font-semibold mb-4">Company</h4>
+              <ul className="space-y-2 text-gray-400">
+                <li>About Us</li>
+                <li>Privacy Policy</li>
+                <li>Terms of Service</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
+            <p>&copy; 2025 NomadNet. All rights reserved. • Internet anywhere, setup-free.</p>
           </div>
         </div>
       </footer>
