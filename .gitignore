@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Dependencies
 node_modules/
 npm-debug.log*
@@ -74,3 +75,10 @@ prepare-server.sh
 
 # GitHub secrets file
 github-secrets-config.txt
+=======
+node_modules
+# Keep environment variables out of version control
+.env
+
+/generated/prisma
+>>>>>>> origin/main

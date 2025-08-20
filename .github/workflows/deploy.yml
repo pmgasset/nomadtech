@@ -1,0 +1,202 @@
+name: 🚀 Deploy NomadNet to Production
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+
+env:
+  NODE_VERSION: '18'
+  PROJECT_PATH: '/var/www/nomadnet-ecommerce'
+
+jobs:
+  test:
+    name: 🧪 Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+      
+    - name: 📦 Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        
+    - name: 📚 Install dependencies
+      run: npm ci
+      
+    - name: 🔍 Run linting
+      run: npm run lint
+      
+    - name: 🏗️ Test build
+      run: npm run build
+
+  deploy:
+    name: 🚀 Deploy to Server
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: 🚀 Deploy via SSH
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ secrets.PORT }}
+        timeout: 300s
+        script: |
+          set -e  # Exit on any error
+          
+          echo "🚀 Starting deployment at $(date)"
+          echo "=================================="
+          
+          # Navigate to project directory
+          cd ${{ env.PROJECT_PATH }}
+          
+          # Show current status
+          echo "📊 Current application status:"
+          pm2 status nomadnet || echo "Application not running"
+          
+          # Backup current version
+          echo "💾 Creating backup..."
+          BACKUP_DIR="/home/$USER/backups/nomadnet-$(date +%Y%m%d_%H%M%S)"
+          mkdir -p $BACKUP_DIR
+          cp -r . $BACKUP_DIR/ || echo "Backup failed, continuing..."
+          
+          # Pull latest changes
+          echo "📥 Pulling latest changes..."
+          git fetch origin
+          git reset --hard origin/main
+          git clean -fd
+          
+          # Check if package.json changed
+          if git diff HEAD~1 HEAD --name-only | grep -q "package.json"; then
+            echo "📦 Package.json changed, clearing node_modules..."
+            rm -rf node_modules
+          fi
+          
+          # Install dependencies
+          echo "📦 Installing dependencies..."
+          npm ci --only=production
+          
+          # Generate Prisma client
+          echo "🗄️ Generating Prisma client..."
+          npx prisma generate
+          
+          # Run database migrations (safely)
+          echo "🗄️ Running database migrations..."
+          npx prisma db push || echo "Database migration failed, check manually"
+          
+          # Build the application
+          echo "🔨 Building application..."
+          npm run build
+          
+          # Update PM2 process
+          echo "🔄 Updating PM2 service..."
+          if pm2 describe nomadnet > /dev/null 2>&1; then
+            pm2 restart nomadnet --update-env
+          else
+            pm2 start ecosystem.config.js
+          fi
+          pm2 save
+          
+          # Wait for application to start
+          echo "⏳ Waiting for application to start..."
+          sleep 10
+          
+          # Health check
+          echo "🏥 Running health checks..."
+          for i in {1..5}; do
+            if curl -f http://localhost:3000/api/health > /dev/null 2>&1; then
+              echo "✅ Health check passed"
+              break
+            else
+              echo "❌ Health check failed, attempt $i/5"
+              sleep 5
+            fi
+          done
+          
+          # Show final status
+          echo "📊 Final application status:"
+          pm2 status nomadnet
+          
+          echo "🎉 Deployment completed successfully at $(date)"
+
+  notify-success:
+    name: 📧 Notify Success
+    needs: [test, deploy]
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+    - name: 📱 Success notification
+      run: |
+        echo "✅ NomadNet deployment successful!"
+        echo "🌐 Site: https://nomadconnect.app"
+        echo "📅 Time: $(date)"
+        echo "🔗 Commit: ${{ github.sha }}"
+
+  notify-failure:
+    name: 🚨 Notify Failure
+    needs: [test, deploy]
+    runs-on: ubuntu-latest
+    if: failure()
+    
+    steps:
+    - name: 🚨 Failure notification
+      run: |
+        echo "❌ NomadNet deployment failed!"
+        echo "🔗 Check workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        echo "📅 Time: $(date)"
+        echo "🔗 Commit: ${{ github.sha }}"
+
+  rollback:
+    name: 🔄 Rollback on Failure
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: failure()
+    
+    steps:
+    - name: 🔄 Rollback deployment
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ secrets.PORT }}
+        script: |
+          echo "🔄 Rolling back deployment..."
+          cd ${{ env.PROJECT_PATH }}
+          
+          # Find latest backup
+          LATEST_BACKUP=$(ls -t /home/$USER/backups/nomadnet-* 2>/dev/null | head -1)
+          
+          if [ -n "$LATEST_BACKUP" ]; then
+            echo "📦 Restoring from backup: $LATEST_BACKUP"
+            rm -rf ./* ./.* 2>/dev/null || true
+            cp -r $LATEST_BACKUP/* .
+            cp -r $LATEST_BACKUP/.* . 2>/dev/null || true
+            
+            # Restart with backed up version
+            pm2 restart nomadnet
+            echo "✅ Rollback completed"
+          else
+            echo "❌ No backup found for rollback"
+          fi

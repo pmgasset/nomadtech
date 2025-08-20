@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Customer {
+  id               String         @id @default(cuid())
+  email            String         @unique
+  firstName        String
+  lastName         String
+  phone            String?
+  stripeCustomerId String?        @unique
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  orders           Order[]
+  subscriptions    Subscription[]
+  @@map("customers")
+}
+
+model Order {
+  id                     String      @id @default(cuid())
+  customerId             String
+  stripeSessionId        String      @unique
+  stripePaymentIntentId  String?
+  status                 OrderStatus @default(PAID)
+  totalAmount            Int
+  currency               String      @default("usd")
+  shippingAddress        String
+  shippingCity           String
+  shippingState          String
+  shippingZipCode        String
+  shippingCountry        String      @default("US")
+  trackingNumber         String?
+  shippedAt             DateTime?
+  deliveredAt           DateTime?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  customer              Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  orderItems            OrderItem[]
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String @id @default(cuid())
+  orderId     String
+  productId   String
+  productName String
+  quantity    Int
+  unitPrice   Int
+  totalPrice  Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  @@map("order_items")
+}
+
+model Subscription {
+  id                   String            @id @default(cuid())
+  customerId           String
+  stripeSubscriptionId String            @unique
+  stripeCustomerId     String
+  status               SubscriptionStatus
+  planName             String
+  planPrice            Int
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  trialEnd             DateTime?
+  cancelAtPeriodEnd    Boolean           @default(false)
+  cancelledAt          DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  customer             Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  @@map("subscriptions")
+}
+
+enum OrderStatus {
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  UNPAID
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+}
