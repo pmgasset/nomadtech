@@ -100,139 +100,86 @@ const NomadNetEcommerce: React.FC = () => {
   const hasDataPlan = cart.some(item => item.isDataPlan);
 
   // Stripe Checkout Integration
-  const handleCheckout = async (): Promise<void> => {
-    setIsLoading(true);
+const handleCheckout = async (): Promise<void> => {
+  setIsLoading(true);
+  
+  try {
+    const routerItems = cart.filter(item => !item.isDataPlan);
+    const subscriptionItems = cart.filter(item => item.isDataPlan);
     
-    try {
-      const routerItems = cart.filter(item => !item.isDataPlan);
-      const subscriptionItems = cart.filter(item => item.isDataPlan);
-      
-      // Create line items for Stripe
-      const line_items = routerItems.map(item => ({
-        price_data: {
-          currency: 'usd',
-          product_data: {
-            name: item.name,
-            description: item.description,
-            images: [item.image],
-            metadata: {
-              product_type: 'router',
-              product_id: item.id
-            }
-          },
-          unit_amount: item.price * 100, // Convert to cents
+    // Create line items for routers (one-time purchase)
+    const routerLineItems = routerItems.map(item => ({
+      price_data: {
+        currency: 'usd',
+        product_data: {
+          name: item.name,
+          description: item.description,
+          images: [item.image],
+          metadata: {
+            product_type: 'router',
+            product_id: item.id
+          }
         },
-        quantity: item.quantity,
-      }));
+        unit_amount: item.price * 100, // Convert to cents
+      },
+      quantity: item.quantity,
+    }));
 
-      // Add subscription items if present
-      if (subscriptionItems.length > 0) {
-        line_items.push(...subscriptionItems.map(item => ({
-          price: item.priceId, // Use the actual Stripe price ID
-          quantity: item.quantity,
-        })));
-      }
+    // Create line items for subscriptions (using price IDs)
+    const subscriptionLineItems = subscriptionItems.map(item => ({
+      price: item.priceId, // Use the actual Stripe price ID
+      quantity: item.quantity,
+    }));
 
-      const metadata = {
-        cart_items: JSON.stringify(cart),
-        has_data_plan: hasDataPlan.toString(),
-        subscription_price_id: hasDataPlan ? dataplan.priceId || '' : '',
-        router_model: selectedRouter?.id || ''
-      };
-
-      const response = await fetch('/api/create-checkout-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          line_items,
-          customer_email: '', // Will be collected in Stripe checkout
-          metadata,
-          success_url: `${window.location.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
-          cancel_url: `${window.location.origin}/cart`,
-          billing_address_collection: 'required',
-          shipping_address_collection: {
-            allowed_countries: ['US', 'CA'],
-          },
-          automatic_tax: {
-            enabled: true,
-          },
-          allow_promotion_codes: true,
-        }),
-      });
-
-      const { url } = await response.json();
-      
-      if (url) {
-        window.location.href = url;
-      } else {
-        throw new Error('No checkout URL received');
-      }
-    } catch (error) {
-      console.error('Error creating checkout session:', error);
-      alert('There was an error processing your request. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Progress indicator for checkout flow
-  const getProgressStep = (): number => {
-    if (currentView === 'products' || currentView === 'home') return 1;
-    if (currentView === 'add-data-plan') return 2;
-    if (currentView === 'cart') return 3;
-    if (currentView === 'checkout') return 4;
-    return 1;
-  };
-
-  const ProgressIndicator: React.FC = () => {
-    const step = getProgressStep();
-    const steps = [
-      { number: 1, title: 'Choose Router', active: step >= 1 },
-      { number: 2, title: 'Add Data Plan', active: step >= 2 },
-      { number: 3, title: 'Review Order', active: step >= 3 },
-      { number: 4, title: 'Checkout', active: step >= 4 }
+    // Combine both types - TypeScript will be happy with this approach
+    const line_items = [
+      ...routerLineItems,
+      ...subscriptionLineItems
     ];
 
-    if (currentView === 'home' || currentView === 'about' || currentView === 'support') return null;
+    const metadata = {
+      cart_items: JSON.stringify(cart),
+      has_data_plan: hasDataPlan.toString(),
+      subscription_price_id: hasDataPlan ? dataplan.priceId || '' : '',
+      router_model: selectedRouter?.id || ''
+    };
 
-    return (
-      <div className="bg-white border-b">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            {steps.map((stepItem, index) => (
-              <React.Fragment key={stepItem.number}>
-                <div className="flex items-center">
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
-                    stepItem.active 
-                      ? 'bg-blue-600 border-blue-600 text-white' 
-                      : 'border-gray-300 text-gray-300'
-                  }`}>
-                    {stepItem.active ? (
-                      <Check className="h-4 w-4" />
-                    ) : (
-                      <span className="text-sm font-semibold">{stepItem.number}</span>
-                    )}
-                  </div>
-                  <span className={`ml-2 text-sm font-medium ${
-                    stepItem.active ? 'text-gray-900' : 'text-gray-300'
-                  }`}>
-                    {stepItem.title}
-                  </span>
-                </div>
-                {index < steps.length - 1 && (
-                  <div className={`flex-1 mx-4 h-px ${
-                    step > stepItem.number ? 'bg-blue-600' : 'bg-gray-300'
-                  }`} />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
+    const response = await fetch('/api/create-checkout-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        line_items,
+        customer_email: '', // Will be collected in Stripe checkout
+        metadata,
+        success_url: `${window.location.origin}/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${window.location.origin}/cart`,
+        billing_address_collection: 'required',
+        shipping_address_collection: {
+          allowed_countries: ['US', 'CA'],
+        },
+        automatic_tax: {
+          enabled: true,
+        },
+        allow_promotion_codes: true,
+      }),
+    });
+
+    const { url } = await response.json();
+    
+    if (url) {
+      window.location.href = url;
+    } else {
+      throw new Error('No checkout URL received');
+    }
+  } catch (error) {
+    console.error('Error creating checkout session:', error);
+    alert('There was an error processing your request. Please try again.');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   // Header Component
   const Header: React.FC = () => (
